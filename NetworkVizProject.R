@@ -54,10 +54,6 @@ print("Graph created successfully!")
 print("Calculating degree centrality...")
 V(graph)$degree <- degree(graph)
 
-# SKIP these slow calculations for large networks:
-# V(graph)$betweenness <- betweenness(graph)  # Takes too long
-# V(graph)$closeness <- closeness(graph)      # Takes too long
-
 # === 6. Community Detection ===
 print("Detecting communities...")
 communities <- cluster_louvain(graph)
@@ -98,8 +94,8 @@ if(length(high_degree_nodes) > 1000) {
   print(paste("Using random sample of", sample_size, "nodes"))
 }
 
-# === 10. VISUALIZATION ===
-print("Creating visualization...")
+# === 10. CREATE VISUALIZATIONS ===
+print("Creating visualizations...")
 set.seed(123)
 
 # Main network plot
@@ -113,11 +109,7 @@ network_plot <- ggraph(subgraph, layout = "fr") +
   labs(title = "Spotify Artist Network",
        subtitle = paste("Showing", vcount(subgraph), "most connected artists"))
 
-# Display the plot
-print(network_plot)
-
-# === 11. Alternative Simple Plot ===
-print("Creating simple visualization...")
+# Simple plot
 simple_plot <- ggraph(subgraph, layout = "fr") +
   geom_edge_link(alpha = 0.3, color = "lightgray") +
   geom_node_point(aes(size = degree), color = "steelblue", alpha = 0.7) +
@@ -125,26 +117,43 @@ simple_plot <- ggraph(subgraph, layout = "fr") +
   theme_void() +
   labs(title = "Spotify Artist Network (Simple Version)")
 
-print(simple_plot)
+# === 11. SAVE PLOTS AS PNG FILES ===
+print("Saving plots as PNG files...")
 
-# === 12. Display Plots in RStudio ===
+# Save the main network plot
+ggsave("spotify_network_main.png", 
+       plot = network_plot, 
+       width = 12, 
+       height = 10, 
+       dpi = 300,
+       bg = "white")
+
+# Save the simple plot
+ggsave("spotify_network_simple.png", 
+       plot = simple_plot, 
+       width = 12, 
+       height = 10, 
+       dpi = 300,
+       bg = "white")
+
+print("PNG files saved successfully!")
+print("Files saved to your working directory:")
+print(paste("- ", getwd(), "/spotify_network_main.png", sep=""))
+print(paste("- ", getwd(), "/spotify_network_simple.png", sep=""))
+
+# === 12. DISPLAY PLOTS IN RSTUDIO ===
 print("Displaying plots in RStudio...")
 
-# Force display the main plot
-dev.new()
+# Display main plot
+print("Showing main network plot...")
 print(network_plot)
 
-# Wait a moment then show simple plot
-Sys.sleep(2)
-dev.new() 
+# Display simple plot
+print("Showing simple network plot...")
 print(simple_plot)
 
-# Also try direct plot() function as backup
-plot(network_plot)
-plot(simple_plot)
-
-# === 13. Export Results ===
-print("Exporting results...")
+# === 13. EXPORT NODE METRICS ===
+print("Exporting node metrics...")
 node_metrics <- data.frame(
   id = V(graph)$name,
   degree = V(graph)$degree,
@@ -159,7 +168,11 @@ print("=== TOP 10 MOST CONNECTED ARTISTS ===")
 top_artists <- head(node_metrics[order(-node_metrics$degree), ], 10)
 print(top_artists)
 
+# === 14. FINAL SUMMARY ===
 print("=== ANALYSIS COMPLETE ===")
-print("Check your Plots tab in RStudio!")
-print("PNG files saved to your working directory")
-print("Metrics exported to spotify_artist_metrics.csv")
+print("✓ Visualizations displayed in RStudio Plots panel")
+print("✓ PNG files saved to your working directory:")
+print("  - spotify_network_main.png")
+print("  - spotify_network_simple.png")
+print("✓ Node metrics exported to spotify_artist_metrics.csv")
+print(paste("Working directory:", getwd()))
