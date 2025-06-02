@@ -73,7 +73,7 @@ print(paste("Average degree:", round(mean(V(graph)$degree), 2)))
 
 # === 9. Create Subgraph for Better Visualization ===
 # For large networks, show only well-connected nodes
-min_degree <- 3  # Adjust this number based on your network
+min_degree <- 3
 high_degree_nodes <- which(V(graph)$degree >= min_degree)
 
 print(paste("Creating subgraph with nodes having degree >=", min_degree))
