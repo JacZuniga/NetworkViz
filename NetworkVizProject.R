@@ -8,7 +8,7 @@ library(igraph)
 library(ggraph)
 library(ggrepel)
 
-# === 2. Load Data ===
+#  2. Load Data from working directory 
 nodes <- read_csv("nodes.csv")
 edges <- read_csv("edges.csv")
 
@@ -27,7 +27,7 @@ print(paste("Using", id_column, "as ID column"))
 print(paste("Total nodes:", nrow(nodes)))
 print(paste("Unique nodes:", length(unique(nodes[[id_column]]))))
 
-# Remove duplicates (keep first occurrence)
+# Remove duplicate artists based on unique ID column (keep first occurrence)
 nodes_clean <- nodes[!duplicated(nodes[[id_column]]), ]
 print(paste("Nodes after removing duplicates:", nrow(nodes_clean)))
 
@@ -152,6 +152,26 @@ print(network_plot)
 print("Showing simple network plot...")
 print(simple_plot)
 
+# Custom Plot 
+print("Creating custom visualization...")
+
+my_plot <- ggraph(custom_subgraph, layout = "circle") +  # Change layout!
+  geom_edge_link(alpha = 0.3, color = "darkgray") +
+  geom_node_point(aes(size = degree, color = as.factor(community)), alpha = 0.8) +
+  geom_node_text(aes(label = ifelse(degree > 20, name, '')), size = 2, repel = TRUE) +
+  scale_color_viridis_d(name = "Community") +
+  theme_void() +
+  labs(title = "Custom Spotify Artist Network",
+       subtitle = "Filtered by degree > 10, circular layout")
+
+ggsave("spotify_network_custom.png", plot = my_plot, width = 12, height = 10, dpi = 300, bg = "white")
+print("✓ Custom plot saved as spotify_network_custom.png")
+print(my_plot)
+
+
+
+
+
 # === 13. EXPORT NODE METRICS ===
 print("Exporting node metrics...")
 node_metrics <- data.frame(
@@ -176,3 +196,4 @@ print("  - spotify_network_main.png")
 print("  - spotify_network_simple.png")
 print("✓ Node metrics exported to spotify_artist_metrics.csv")
 print(paste("Working directory:", getwd()))
+
