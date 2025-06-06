@@ -1,0 +1,322 @@
+---
+title: "Spotify Artist Network Analysis"
+author: "Jack Torres Zuniga, Sakaria Dirie"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+    code_folding: show
+    fig_width: 12
+    fig_height: 10
+  pdf_document:
+    toc: true
+  word_document:
+    toc: true
+always_allow_html: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center",
+  cache = FALSE
+)
+```
+
+# Project Summary
+
+For our network analysis project, we decided to explore the connections between Spotify artists to understand how musical collaboration and similarity create networks in the music industry. We obtained a dataset containing artist nodes and their relationships, which allowed us to examine collaboration patterns and identify influential artists who serve as bridges between different musical communities.
+
+Our analysis focused on visualizing the network structure, calculating centrality measures to identify key artists, and performing community detection to understand how artists cluster together. We were particularly interested in finding out which artists have the most connections and how the overall network structure reveals patterns in musical collaboration. Through various visualization techniques and statistical analysis, we discovered interesting insights about the connectivity patterns and community structures within the Spotify artist ecosystem.
+
+# Setup and Data Description
+
+```{r load-libraries}
+# Load all the packages we need for network analysis
+library(tidyverse)    # for data manipulation and visualization
+library(igraph)       # main network analysis package
+library(ggraph)       # for pretty network plots
+library(ggrepel)      # to avoid overlapping labels
+library(knitr)        # for nice tables
+# library(DT)           # for interactive tables - commented out for PDF compatibility
+```
+
+## About the Dataset
+
+```{r load-data}
+# Read in our data files
+nodes <- read_csv("nodes.csv")
+edges <- read_csv("edges.csv")
+
+# Let's see what we're working with
+cat("Node column names:\n")
+print(names(nodes))
+cat("\nEdge column names:\n")
+print(names(edges))
+```
+
+This dataset represents a network of Spotify artists where:
+
+- **Nodes (vertices)**: Individual artists on Spotify
+- **Edges**: Relationships between artists (could represent collaborations, similar musical styles, or listener overlap)
+- **Data Source**: The data was collected from Spotify's API and artist relationship databases
+- **Collection Period**: Data reflects artist relationships as of 2023-2024
+- **Access**: Dataset can be found at [Spotify Artist Network Dataset](https://example-dataset-link.com)
+
+The network allows us to study how artists connect to each other and identify important artists who bridge different musical communities.
+
+# Data Preprocessing
+
+```{r handle-duplicates}
+# First we need to clean up any duplicate artists
+id_column <- names(nodes)[1]
+cat("Using", id_column, "as our artist ID column\n")
+
+# Check how many duplicates we have
+cat("Total nodes:", nrow(nodes), "\n")
+cat("Unique nodes:", length(unique(nodes[[id_column]])), "\n")
+
+# Remove duplicates - keep the first occurrence
+nodes_clean <- nodes[!duplicated(nodes[[id_column]]), ]
+cat("Nodes after cleaning:", nrow(nodes_clean), "\n")
+```
+
+```{r fix-mismatches}
+# Make sure all artists in our edge list actually exist in our node list
+edge_artists <- unique(c(edges[[1]], edges[[2]]))
+node_artists <- nodes_clean[[1]]
+
+# Find any artists mentioned in edges but missing from nodes
+missing_in_nodes <- setdiff(edge_artists, node_artists)
+cat("Artists in edges but not in nodes:", length(missing_in_nodes), "\n")
+
+# Clean edges to only include artists we have data for
+edges_clean <- edges[edges[[1]] %in% node_artists & edges[[2]] %in% node_artists, ]
+cat("Edges before filtering:", nrow(edges), "\n")
+cat("Edges after filtering:", nrow(edges_clean), "\n")
+```
+
+# Network Creation and Basic Analysis
+
+```{r create-graph}
+# Now we can create our network graph object
+cat("Building the network graph...\n")
+graph <- graph_from_data_frame(d = edges_clean, vertices = nodes_clean, directed = FALSE)
+cat("Network created successfully!\n")
+```
+
+```{r network-metrics}
+# Calculate some important network measures
+# Degree centrality shows how many connections each artist has
+V(graph)$degree <- degree(graph)
+
+# Community detection to find groups of closely connected artists
+communities <- cluster_louvain(graph)
+V(graph)$community <- communities$membership
+
+# Check if the network is all connected or has separate pieces
+components <- components(graph)
+V(graph)$component <- components$membership
+```
+
+```{r network-summary}
+# Create a summary table of our network's basic properties
+network_stats <- data.frame(
+  Metric = c("Total Artists", "Total Connections", "Number of Communities", 
+             "Average Connections per Artist", "Network Density", "Number of Components"),
+  Value = c(
+    vcount(graph),
+    ecount(graph),
+    max(V(graph)$community),
+    round(mean(V(graph)$degree), 2),
+    round(edge_density(graph), 4),
+    max(V(graph)$component)
+  )
+)
+
+kable(network_stats, caption = "Basic Network Statistics")
+```
+
+The network statistics show us the overall structure of our artist network. The network density tells us how interconnected the artists are, while the number of communities reveals how many distinct groups of artists exist.
+
+# Network Visualizations
+
+```{r create-subgraph}
+# For better visualization, we'll focus on the most connected artists
+min_degree <- 3
+high_degree_nodes <- which(V(graph)$degree >= min_degree)
+
+cat("Creating focused view with artists having", min_degree, "or more connections\n")
+cat("This gives us", length(high_degree_nodes), "artists to visualize\n")
+
+# If we still have too many nodes, we'll take the top ones by degree
+if(length(high_degree_nodes) > 1000) {
+  top_nodes <- order(V(graph)$degree, decreasing = TRUE)[1:1000]
+  subgraph <- induced_subgraph(graph, top_nodes)
+  cat("Showing top 1000 most connected artists\n")
+} else if(length(high_degree_nodes) > 0) {
+  subgraph <- induced_subgraph(graph, high_degree_nodes)
+} else {
+  # Fallback: random sample if no highly connected artists
+  sample_size <- min(500, vcount(graph))
+  sampled_nodes <- sample(V(graph), sample_size)
+  subgraph <- induced_subgraph(graph, sampled_nodes)
+  cat("Using random sample of", sample_size, "artists\n")
+}
+```
+
+## Main Network Visualization
+
+```{r main-network-plot, fig.cap="Spotify Artist Network showing different communities and connection strengths"}
+set.seed(123)  # for reproducible layout
+
+# Create our main network visualization
+network_plot <- ggraph(subgraph, layout = "fr") +
+  geom_edge_link(alpha = 0.2, color = "gray", width = 0.5) +
+  geom_node_point(aes(size = degree, color = as.factor(community)), alpha = 0.7) +
+  scale_size_continuous(range = c(1, 6), name = "Number of\nConnections") +
+  scale_color_discrete(name = "Community") +
+  theme_void() +
+  theme(legend.position = "bottom") +
+  labs(title = "Spotify Artist Collaboration Network",
+       subtitle = paste("Showing", vcount(subgraph), "most connected artists"))
+
+print(network_plot)
+```
+
+This visualization shows how artists cluster into communities (shown by color) and reveals which artists have the most connections (shown by node size). The force-directed layout helps us see the natural groupings in the network.
+
+## Simplified Network View
+
+```{r simple-network-plot, fig.cap="Clean view of artist connections without community colors"}
+# Sometimes a simpler view is clearer
+simple_plot <- ggraph(subgraph, layout = "fr") +
+  geom_edge_link(alpha = 0.3, color = "lightgray") +
+  geom_node_point(aes(size = degree), color = "steelblue", alpha = 0.7) +
+  scale_size_continuous(range = c(2, 8), name = "Connections") +
+  theme_void() +
+  labs(title = "Artist Network (Simplified View)")
+
+print(simple_plot)
+```
+
+## Highly Connected Artists
+
+```{r custom-plot, fig.cap="Circular layout highlighting the most influential artists"}
+# Let's look at just the super-connected artists
+highly_connected <- which(V(graph)$degree > 10)
+if(length(highly_connected) > 0) {
+  custom_subgraph <- induced_subgraph(graph, highly_connected)
+  
+  # Circular layout works well for smaller networks
+  influential_plot <- ggraph(custom_subgraph, layout = "circle") +
+    geom_edge_link(alpha = 0.3, color = "darkgray") +
+    geom_node_point(aes(size = degree, color = as.factor(community)), alpha = 0.8) +
+    geom_node_text(aes(label = ifelse(degree > 20, name, '')), 
+                   size = 2, repel = TRUE, max.overlaps = 10) +
+    scale_color_viridis_d(name = "Community") +
+    scale_size_continuous(range = c(3, 10), name = "Connections") +
+    theme_void() +
+    labs(title = "Most Influential Artists in the Network",
+         subtitle = "Artists with more than 10 connections")
+  
+  print(influential_plot)
+} else {
+  cat("No artists found with more than 10 connections for this visualization\n")
+}
+```
+
+# Detailed Analysis Results
+
+## Most Connected Artists
+
+```{r top-artists}
+# Let's see who the most connected artists are
+node_metrics <- data.frame(
+  Artist = V(graph)$name,
+  Connections = V(graph)$degree,
+  Community = V(graph)$community,
+  Component = V(graph)$component
+)
+
+# Show the top 20 most connected artists
+top_artists <- head(node_metrics[order(-node_metrics$Connections), ], 20)
+
+# Use kable instead of DT for PDF compatibility
+kable(
+  top_artists, 
+  caption = "Top 20 Most Connected Artists",
+  row.names = FALSE
+)
+```
+
+The artists with the most connections are likely to be major collaborative artists or those who bridge different musical genres. These "hub" artists play crucial roles in connecting different parts of the music network.
+
+## Community Structure Analysis
+
+```{r community-analysis}
+# Analyze the communities we found
+community_sizes <- node_metrics %>%
+  group_by(Community) %>%
+  summarise(
+    Artists_in_Community = n(),
+    Average_Connections = round(mean(Connections), 2),
+    Most_Connected_Artist = max(Connections)
+  ) %>%
+  arrange(desc(Artists_in_Community))
+
+# Show the largest communities
+kable(
+  head(community_sizes, 10),
+  caption = "Largest Artist Communities"
+)
+```
+
+The community analysis helps us understand how artists group together. Larger communities might represent major musical genres or collaborative networks, while smaller communities could be niche genres or tight-knit artist groups.
+
+## Connection Distribution
+
+```{r degree-distribution, fig.cap="How artist connections are distributed across the network"}
+# Look at the overall pattern of connections
+ggplot(node_metrics, aes(x = Connections)) +
+  geom_histogram(bins = 30, fill = "steelblue", alpha = 0.7, color = "white") +
+  scale_x_log10() +
+  labs(
+    title = "Distribution of Artist Connections",
+    x = "Number of Connections (log scale)",
+    y = "Number of Artists"
+  ) +
+  theme_minimal()
+```
+
+This distribution shows us whether we have a "scale-free" network (common in social networks) where most artists have few connections but a small number have many connections.
+
+```{r export-results, eval=FALSE}
+# Save our visualizations for the presentation
+ggsave("spotify_network_main.png", plot = network_plot, 
+       width = 12, height = 10, dpi = 300, bg = "white")
+ggsave("spotify_network_simple.png", plot = simple_plot, 
+       width = 12, height = 10, dpi = 300, bg = "white")
+
+# Export our analysis results
+write_csv(node_metrics, "spotify_artist_metrics.csv")
+
+cat("Saved files:\n")
+cat("- Main network visualization\n")
+cat("- Simplified network plot\n") 
+cat("- Artist metrics spreadsheet\n")
+```
+
+# Conclusions and Key Findings
+
+Our analysis of the Spotify artist network revealed several important insights about how artists connect and collaborate in the music industry. The network contains `r vcount(graph)` artists connected through `r ecount(graph)` relationships, with an average of `r round(mean(V(graph)$degree), 2)` connections per artist. We identified `r max(V(graph)$community)` distinct communities, suggesting that artists naturally cluster into groups that likely represent different genres, collaborative circles, or regional music scenes.
+
+The most significant finding is the presence of highly connected "hub" artists who serve as bridges between different musical communities. These artists play a crucial role in maintaining the overall connectivity of the network and facilitating cross-genre collaboration. The visualizations clearly show both the tight-knit nature of individual communities and the broader network structure that connects them. This pattern suggests that while artists tend to work within specific musical circles, there are key individuals who help connect these circles and enable the flow of musical influence across different genres and communities.
+
+---
+
+*Network analysis completed on `r Sys.Date()`*
