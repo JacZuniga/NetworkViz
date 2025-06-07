@@ -1,9 +1,9 @@
 Spotify Artist Network Analysis
+
 Authors
 Jack T Zuniga & Sakaria Dirie
 
 
-Spotify Artist Network Analysis 
 
 You can find the R markdown using this link > https://rpubs.com/jacktz/1319105
 
